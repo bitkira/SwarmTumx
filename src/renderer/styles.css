@@ -1,0 +1,306 @@
+:root {
+  color-scheme: dark;
+  --bg: rgb(24, 24, 24);
+  --panel: rgb(8, 8, 8);
+  --text: rgb(220, 220, 220);
+  --muted: rgb(132, 132, 132);
+  --border: rgba(128, 128, 128, 0.2);
+  --border-focus: rgba(255, 255, 255, 0.5);
+  --terminal-accent: rgb(166, 241, 204);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --font-mono: "Geist Mono", "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.canvas-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: rgba(24, 24, 24, 0.5);
+}
+
+.canvas-shell.is-grabbing,
+.canvas-shell.is-dragging-tile,
+.canvas-shell.is-resizing-tile {
+  cursor: grabbing;
+}
+
+.canvas-shell.is-dragging-tile .terminal-output,
+.canvas-shell.is-resizing-tile .terminal-output {
+  pointer-events: none;
+  user-select: none;
+}
+
+.grid-layer,
+.canvas-ambient,
+.canvas-surface {
+  position: absolute;
+  inset: 0;
+}
+
+.grid-layer,
+.canvas-ambient {
+  pointer-events: none;
+}
+
+.canvas-ambient {
+  background: rgba(24, 24, 24, 0.5);
+}
+
+.canvas-surface {
+  overflow: hidden;
+}
+
+.zoom-indicator {
+  position: absolute;
+  z-index: 10;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(18, 18, 18, 0.8);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.zoom-indicator {
+  right: 12px;
+  bottom: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.zoom-indicator.is-visible {
+  opacity: 1;
+}
+
+.fatal-error-overlay {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  max-width: min(720px, calc(100vw - 48px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-focus);
+  border-radius: 8px;
+  background: rgba(8, 8, 8, 0.94);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.terminal-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  transform-origin: top left;
+  outline: none;
+}
+
+.terminal-tile.is-active {
+  border-color: var(--border-focus);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.tile-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel);
+  cursor: grab;
+  user-select: none;
+}
+
+.tile-title-text {
+  display: flex;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.7;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tile-title-parent {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.tile-title-name {
+  flex-shrink: 0;
+}
+
+.tile-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tile-action-btn {
+  all: unset;
+  padding: 0 2px;
+  color: var(--text);
+  opacity: 0.4;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.tile-action-btn:hover {
+  opacity: 0.8;
+}
+
+.tile-close-btn {
+  font-size: 18px;
+}
+
+.tile-close-btn:hover {
+  color: #e53935;
+  opacity: 1;
+}
+
+.tile-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 0 8px;
+  cursor: text;
+}
+
+.terminal-output {
+  margin: 0;
+  overflow: auto;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.42;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
+  padding: 0 0 8px;
+  outline: none;
+}
+
+.terminal-output::-webkit-scrollbar {
+  width: 7px;
+}
+
+.terminal-output::-webkit-scrollbar-thumb {
+  background: rgba(121, 121, 121, 0.4);
+  border-radius: 4px;
+}
+
+.terminal-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 121, 121, 0.7);
+}
+
+.tile-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.tile-resize-handle.edge-n,
+.tile-resize-handle.edge-s {
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.tile-resize-handle.edge-e,
+.tile-resize-handle.edge-w {
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.tile-resize-handle.edge-n {
+  top: -3px;
+}
+
+.tile-resize-handle.edge-s {
+  bottom: -3px;
+}
+
+.tile-resize-handle.edge-e {
+  right: -3px;
+}
+
+.tile-resize-handle.edge-w {
+  left: -3px;
+}
+
+.tile-resize-handle.corner-nw,
+.tile-resize-handle.corner-ne,
+.tile-resize-handle.corner-sw,
+.tile-resize-handle.corner-se {
+  width: 12px;
+  height: 12px;
+}
+
+.tile-resize-handle.corner-nw {
+  top: -3px;
+  left: -3px;
+  cursor: nwse-resize;
+}
+
+.tile-resize-handle.corner-ne {
+  top: -3px;
+  right: -3px;
+  cursor: nesw-resize;
+}
+
+.tile-resize-handle.corner-sw {
+  bottom: -3px;
+  left: -3px;
+  cursor: nesw-resize;
+}
+
+.tile-resize-handle.corner-se {
+  right: -3px;
+  bottom: -3px;
+  cursor: nwse-resize;
+}
