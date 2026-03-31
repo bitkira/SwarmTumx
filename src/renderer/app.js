@@ -9,8 +9,9 @@ const MIN_TILE_HEIGHT = 180;
 const DEFAULT_CAPTURE_LINES = 240;
 const POLL_INTERVAL_MS = 900;
 const SAVE_DEBOUNCE_MS = 200;
-const CHAR_WIDTH = 7.22;
-const CELL_HEIGHT = 17;
+const DEFAULT_CHAR_WIDTH = 7.22;
+const DEFAULT_CELL_HEIGHT = 17;
+const TAB_SIZE = 8;
 const SPECIAL_KEY_MAP = {
   ArrowDown: "Down",
   ArrowLeft: "Left",
@@ -28,6 +29,7 @@ const SPECIAL_KEY_MAP = {
 };
 const ANSI_OSC_PATTERN = /\u001B\][^\u0007]*(?:\u0007|\u001B\\)/gu;
 const ANSI_CSI_PATTERN = /\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/gu;
+const C0_CONTROL_PATTERN = /[\u0000-\u0008\u000B-\u001F\u007F]/gu;
 
 const api = window.swarmTumx;
 
@@ -37,6 +39,10 @@ const gridLayer = document.querySelector("#grid-layer");
 const zoomIndicator = document.querySelector("#zoom-indicator");
 
 const state = {
+  cellMetrics: {
+    charWidth: DEFAULT_CHAR_WIDTH,
+    cellHeight: DEFAULT_CELL_HEIGHT,
+  },
   workspaceRoot: "",
   viewport: {
     panX: 320,
@@ -110,15 +116,66 @@ function splitDisplayPath(filePath) {
 
 function stripAnsi(text) {
   return String(text || "")
-    .replaceAll("\r", "")
     .replace(ANSI_OSC_PATTERN, "")
     .replace(ANSI_CSI_PATTERN, "");
 }
 
+function measureTerminalCellMetrics() {
+  const probe = document.createElement("span");
+  probe.textContent = "MMMMMMMMMM";
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.whiteSpace = "pre";
+  probe.style.fontFamily = "var(--font-mono)";
+  probe.style.fontSize = "12px";
+  probe.style.lineHeight = "1.42";
+  document.body.append(probe);
+
+  const rect = probe.getBoundingClientRect();
+  probe.remove();
+
+  return {
+    charWidth: rect.width > 0 ? rect.width / 10 : DEFAULT_CHAR_WIDTH,
+    cellHeight: rect.height > 0 ? rect.height : DEFAULT_CELL_HEIGHT,
+  };
+}
+
+function expandTabs(text, tabSize = TAB_SIZE) {
+  const lines = String(text).split("\n");
+  return lines.map((line) => {
+    let column = 0;
+    let expanded = "";
+
+    for (const character of line) {
+      if (character === "\t") {
+        const spaces = tabSize - (column % tabSize || 0);
+        expanded += " ".repeat(spaces);
+        column += spaces;
+        continue;
+      }
+
+      expanded += character;
+      column += 1;
+    }
+
+    return expanded;
+  }).join("\n");
+}
+
+function normalizeTerminalText(text) {
+  return expandTabs(
+    stripAnsi(text)
+      .replaceAll("\r\n", "\n")
+      .replaceAll("\r", "\n")
+      .replace(C0_CONTROL_PATTERN, ""),
+  );
+}
+
 function estimateTerminalSize(tile) {
   return {
-    cols: Math.max(80, Math.floor((tile.width - 16) / CHAR_WIDTH)),
-    rows: Math.max(20, Math.floor((tile.height - 54) / CELL_HEIGHT)),
+    cols: Math.max(80, Math.floor((tile.width - 16) / state.cellMetrics.charWidth)),
+    rows: Math.max(20, Math.floor((tile.height - 54) / state.cellMetrics.cellHeight)),
   };
 }
 
@@ -398,7 +455,7 @@ function renderOutput(sessionId, outputText) {
     return;
   }
 
-  dom.output.textContent = stripAnsi(outputText);
+  dom.output.textContent = normalizeTerminalText(outputText);
   dom.output.scrollTop = dom.output.scrollHeight;
 }
 
@@ -795,6 +852,9 @@ canvasShell.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".terminal-tile")) {
     return;
   }
+  if (event.button === 2 || (event.button === 0 && event.ctrlKey)) {
+    return;
+  }
   if (event.button !== 0 && event.button !== 1) {
     return;
   }
@@ -803,6 +863,15 @@ canvasShell.addEventListener("pointerdown", (event) => {
 });
 
 canvasShell.addEventListener("dblclick", (event) => {
+  if (event.target.closest(".terminal-tile")) {
+    return;
+  }
+  const world = worldFromClient(event.clientX, event.clientY);
+  void createTerminalTileAt(world.x, world.y);
+});
+
+canvasShell.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
   if (event.target.closest(".terminal-tile")) {
     return;
   }
@@ -863,6 +932,7 @@ window.addEventListener("resize", () => {
 });
 
 async function init() {
+  state.cellMetrics = measureTerminalCellMetrics();
   state.workspaceRoot = await api.app.getWorkspaceRoot();
   const saved = await api.canvas.loadState();
   hydrateState(saved);

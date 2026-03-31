@@ -12,6 +12,7 @@ const SOCKET_NAME = "swarmtumx";
 const SESSION_PREFIX = "swarmtumx-";
 const DEFAULT_CAPTURE_LINES = 240;
 const sessionMutationQueues = new Map();
+const CAPTURE_ARGS = ["-p", "-e", "-J", "-N"];
 
 function getTmuxBin() {
   return resolvePackagedResource("tmux")
@@ -198,8 +199,7 @@ async function readSession(sessionId, options = {}) {
     "capture-pane",
     "-t",
     tmuxSessionName(sessionId),
-    "-p",
-    "-e",
+    ...CAPTURE_ARGS,
     "-S",
     `-${lines}`,
   );

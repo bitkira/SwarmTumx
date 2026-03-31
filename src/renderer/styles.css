@@ -214,13 +214,14 @@ input {
   color: var(--text);
   font-size: 12px;
   line-height: 1.42;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
   font-family: var(--font-mono);
   scrollbar-width: thin;
   scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
   padding: 0 0 8px;
   outline: none;
+  tab-size: 8;
 }
 
 .terminal-output::-webkit-scrollbar {
