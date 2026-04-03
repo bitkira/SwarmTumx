@@ -12,6 +12,7 @@ const {
   sendKeys,
   sendKeysToPane,
   sessionExists,
+  typeHumanToPane,
   typeToPane,
   typeText,
 } = require("../runtime/tmux-adapter");
@@ -77,6 +78,9 @@ function registerIpc() {
   ipcMain.handle("tmux:read-pane", (_event, tmuxPaneId, options) => readPane(tmuxPaneId, options));
   ipcMain.handle("tmux:read-session", (_event, sessionId, options) => readSession(sessionId, options));
   ipcMain.handle("tmux:type-pane", (_event, tmuxPaneId, text) => typeToPane(tmuxPaneId, text));
+  ipcMain.handle("tmux:type-human-pane", (_event, tmuxPaneId, text, options) =>
+    typeHumanToPane(tmuxPaneId, text, options)
+  );
   ipcMain.handle("tmux:type-text", (_event, sessionId, text) => typeText(sessionId, text));
   ipcMain.handle("tmux:send-keys-pane", (_event, tmuxPaneId, keys) => sendKeysToPane(tmuxPaneId, keys));
   ipcMain.handle("tmux:send-keys", (_event, sessionId, keys) => sendKeys(sessionId, keys));

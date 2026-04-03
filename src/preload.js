@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("swarmTumx", {
     readPane: (tmuxPaneId, options) => ipcRenderer.invoke("tmux:read-pane", tmuxPaneId, options),
     readSession: (sessionId, options) => ipcRenderer.invoke("tmux:read-session", sessionId, options),
     typePane: (tmuxPaneId, text) => ipcRenderer.invoke("tmux:type-pane", tmuxPaneId, text),
+    typeHumanPane: (tmuxPaneId, text, options) =>
+      ipcRenderer.invoke("tmux:type-human-pane", tmuxPaneId, text, options),
     typeText: (sessionId, text) => ipcRenderer.invoke("tmux:type-text", sessionId, text),
     sendKeysToPane: (tmuxPaneId, keys) => ipcRenderer.invoke("tmux:send-keys-pane", tmuxPaneId, keys),
     sendKeys: (sessionId, keys) => ipcRenderer.invoke("tmux:send-keys", sessionId, keys),

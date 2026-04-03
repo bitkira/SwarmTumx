@@ -11,6 +11,7 @@ const {
   sendKeys,
   sendKeysToPane,
   sessionExists,
+  typeHumanToPane,
   typeToPane,
   typeText,
 } = require("../src/runtime/tmux-adapter");
@@ -31,6 +32,7 @@ function usage() {
       "  swarmtumx-bridge read-pane <tmuxPaneId> [lines]",
       "  swarmtumx-bridge type <sessionId> <text>",
       "  swarmtumx-bridge type-pane <tmuxPaneId> <text>",
+      "  swarmtumx-bridge type-human-pane <tmuxPaneId> <text>",
       "  swarmtumx-bridge keys <sessionId> <key...>",
       "  swarmtumx-bridge keys-pane <tmuxPaneId> <key...>",
       "  swarmtumx-bridge resize <sessionId> <cols> <rows>",
@@ -103,6 +105,13 @@ async function main() {
   if (command === "type-pane") {
     const [tmuxPaneId, ...textParts] = args;
     await typeToPane(tmuxPaneId, textParts.join(" "));
+    printJson({ ok: true });
+    return;
+  }
+
+  if (command === "type-human-pane") {
+    const [tmuxPaneId, ...textParts] = args;
+    await typeHumanToPane(tmuxPaneId, textParts.join(" "));
     printJson({ ok: true });
     return;
   }

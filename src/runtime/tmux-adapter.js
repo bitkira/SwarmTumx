@@ -469,7 +469,9 @@ async function typeHumanToPane(tmuxPaneId, text, options = {}) {
       throw new Error(`tmux pane not found for ${tmuxPaneId}`)
     }
 
-    for (const key of Array.from(String(text || ""))) {
+    const keys = Array.from(String(text || ""))
+    for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index]
       await tmuxExecWithSocket(
         socketName,
         "send-keys",
@@ -477,7 +479,9 @@ async function typeHumanToPane(tmuxPaneId, text, options = {}) {
         tmuxPaneId,
         encodeHumanKeypress(key),
       )
-      await sleep(keyDelayMs)
+      if (index < keys.length - 1) {
+        await sleep(keyDelayMs)
+      }
     }
 
     return { ok: true }

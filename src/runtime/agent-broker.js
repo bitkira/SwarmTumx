@@ -185,7 +185,7 @@ class AgentAttentionBroker {
       }
     }
 
-    for (const binding of bindings) {
+    await Promise.all(bindings.map(async (binding) => {
       try {
         await this.tickBinding(binding)
       } catch (error) {
@@ -196,7 +196,7 @@ class AgentAttentionBroker {
           scope: "binding",
         })
       }
-    }
+    }))
 
     this.recordHealth({
       scope: "tick",
