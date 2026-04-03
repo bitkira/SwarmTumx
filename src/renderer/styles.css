@@ -1,14 +1,13 @@
 :root {
   color-scheme: dark;
-  --bg: rgb(24, 24, 24);
-  --panel: rgb(8, 8, 8);
-  --text: rgb(220, 220, 220);
-  --muted: rgb(132, 132, 132);
-  --border: rgba(128, 128, 128, 0.2);
-  --border-focus: rgba(255, 255, 255, 0.5);
-  --terminal-accent: rgb(166, 241, 204);
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  --font-mono: "Geist Mono", "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  --bg: #181818;
+  --panel: #0a0a0a;
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --panel-border-active: rgba(255, 255, 255, 0.38);
+  --panel-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --text: #d8d8d8;
+  --muted: #828282;
+  --font-mono: "Geist Mono", "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
 }
 
 * {
@@ -36,7 +35,7 @@ input {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: rgba(24, 24, 24, 0.5);
+  background: var(--bg);
 }
 
 .canvas-shell.is-grabbing,
@@ -45,8 +44,8 @@ input {
   cursor: grabbing;
 }
 
-.canvas-shell.is-dragging-tile .terminal-output,
-.canvas-shell.is-resizing-tile .terminal-output {
+.canvas-shell.is-dragging-tile .tile-terminal,
+.canvas-shell.is-resizing-tile .tile-terminal {
   pointer-events: none;
   user-select: none;
 }
@@ -64,7 +63,9 @@ input {
 }
 
 .canvas-ambient {
-  background: rgba(24, 24, 24, 0.5);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.025), transparent 40%),
+    rgba(24, 24, 24, 0.96);
 }
 
 .canvas-surface {
@@ -73,23 +74,20 @@ input {
 
 .zoom-indicator {
   position: absolute;
-  z-index: 10;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: rgba(18, 18, 18, 0.8);
-  backdrop-filter: blur(4px);
-  pointer-events: none;
-  user-select: none;
-}
-
-.zoom-indicator {
   right: 12px;
   bottom: 12px;
+  z-index: 10;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(10, 10, 10, 0.88);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 500;
-  color: var(--muted);
+  line-height: 1;
   opacity: 0;
+  pointer-events: none;
+  user-select: none;
   transition: opacity 180ms ease;
 }
 
@@ -102,13 +100,13 @@ input {
   left: 24px;
   bottom: 24px;
   max-width: min(720px, calc(100vw - 48px));
-  padding: 10px 12px;
-  border: 1px solid var(--border-focus);
-  border-radius: 8px;
-  background: rgba(8, 8, 8, 0.94);
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 10, 10, 0.95);
   color: var(--text);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   white-space: pre-wrap;
   pointer-events: none;
 }
@@ -118,19 +116,16 @@ input {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: var(--panel-shadow);
   transform-origin: top left;
   outline: none;
 }
 
 .terminal-tile.is-active {
-  border-color: var(--border-focus);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.5),
-    0 2px 8px rgba(0, 0, 0, 0.5);
+  border-color: var(--panel-border-active);
 }
 
 .tile-title-bar {
@@ -138,8 +133,10 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
-  background: var(--panel);
+  min-height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 10, 10, 0.98);
   cursor: grab;
   user-select: none;
 }
@@ -147,14 +144,12 @@ input {
 .tile-title-text {
   display: flex;
   min-width: 0;
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 500;
-  color: var(--text);
-  opacity: 0.7;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
 }
 
 .tile-title-parent {
@@ -165,76 +160,79 @@ input {
 }
 
 .tile-title-name {
+  color: var(--text);
   flex-shrink: 0;
 }
 
 .tile-btn-group {
   display: flex;
   align-items: center;
-  gap: 2px;
   flex-shrink: 0;
 }
 
 .tile-action-btn {
   all: unset;
-  padding: 0 2px;
-  color: var(--text);
-  opacity: 0.4;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.56);
+  cursor: pointer;
 }
 
 .tile-action-btn:hover {
-  opacity: 0.8;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tile-close-btn {
   font-size: 18px;
-}
-
-.tile-close-btn:hover {
-  color: #e53935;
-  opacity: 1;
+  line-height: 1;
 }
 
 .tile-content {
+  position: relative;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
-  padding: 0 8px;
-  cursor: text;
 }
 
-.terminal-output {
-  margin: 0;
-  overflow: auto;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.42;
-  white-space: pre;
-  word-break: normal;
-  font-family: var(--font-mono);
+.tile-terminal {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tile-terminal .xterm {
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+}
+
+.tile-terminal .xterm-viewport,
+.tile-terminal .xterm-screen,
+.tile-terminal .xterm-screen canvas {
+  background: transparent !important;
+}
+
+.tile-terminal .xterm-viewport {
   scrollbar-width: thin;
-  scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
-  padding: 0 0 8px;
-  outline: none;
-  tab-size: 8;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
-.terminal-output::-webkit-scrollbar {
-  width: 7px;
+.tile-terminal .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
 }
 
-.terminal-output::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.4);
-  border-radius: 4px;
+.tile-terminal .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
 }
 
-.terminal-output::-webkit-scrollbar-thumb:hover {
-  background: rgba(121, 121, 121, 0.7);
+.tile-terminal .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .tile-resize-handle {

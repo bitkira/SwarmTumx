@@ -11,6 +11,7 @@ const {
   sessionExists,
   typeText,
 } = require("../runtime/tmux-adapter");
+const { TmuxTerminalManager } = require("../runtime/tmux-terminal-manager");
 const {
   loadCanvasState,
   saveCanvasState,
@@ -20,6 +21,7 @@ const {
 } = require("../runtime/paths");
 
 let mainWindow = null;
+let terminalManager = null;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -38,9 +40,20 @@ function createMainWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+
+  const senderId = mainWindow.webContents.id;
+  mainWindow.webContents.once("destroyed", () => {
+    terminalManager?.detachSender(senderId);
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
 function registerIpc() {
+  terminalManager = new TmuxTerminalManager();
+
   ipcMain.handle("app:get-workspace-root", () => getWorkspaceRoot());
 
   ipcMain.handle("canvas:load-state", () => loadCanvasState());
@@ -63,6 +76,19 @@ function registerIpc() {
     resizeSession(sessionId, cols, rows)
   );
   ipcMain.handle("tmux:kill-session", (_event, sessionId) => killSession(sessionId));
+
+  ipcMain.handle("terminal:attach-session", (event, sessionId, options) =>
+    terminalManager.attachSession(event.sender, sessionId, options)
+  );
+  ipcMain.handle("terminal:detach-session", (_event, sessionId) =>
+    terminalManager.detachSession(sessionId)
+  );
+  ipcMain.handle("terminal:resize-session", (_event, sessionId, cols, rows) =>
+    terminalManager.resizeSession(sessionId, cols, rows)
+  );
+  ipcMain.handle("terminal:write", (_event, sessionId, data) =>
+    terminalManager.writeToSession(sessionId, data)
+  );
 }
 
 app.whenReady().then(() => {
