@@ -15,6 +15,7 @@ const DEFAULT_CAPTURE_LINES = 240
 const DEFAULT_CAPTURE_ARGS = ["-p", "-e"]
 const HISTORY_CAPTURE_ARGS = ["-p", "-e", "-J", "-N"]
 const RGB_CLIENT_TERM = "xterm-256color:RGB"
+const DEFAULT_HUMAN_KEY_DELAY_MS = 10
 const KNOWN_TMUX_PATHS = [
   "/opt/homebrew/bin/tmux",
   "/usr/local/bin/tmux",
@@ -175,6 +176,10 @@ function enqueueSessionMutation(sessionId, task) {
   })
 
   return next
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function ensureTmuxServerConfigured() {
@@ -437,6 +442,48 @@ async function typeToPane(tmuxPaneId, text, options = {}) {
   })
 }
 
+function encodeHumanKeypress(key) {
+  if (key === ";") {
+    return "\\;"
+  }
+  if (key === "\r" || key === "\n") {
+    return "Enter"
+  }
+  if (key === "\t") {
+    return "Tab"
+  }
+  return key
+}
+
+async function typeHumanToPane(tmuxPaneId, text, options = {}) {
+  const socketName = resolveSocketName(options.socketName)
+  const queueKey = `pane:${socketName}:${tmuxPaneId}`
+  const keyDelayMs = normalizePositiveInt(
+    options.keyDelayMs,
+    DEFAULT_HUMAN_KEY_DELAY_MS,
+    "keyDelayMs",
+  )
+
+  return enqueueSessionMutation(queueKey, async () => {
+    if (!await paneExists(tmuxPaneId, { socketName })) {
+      throw new Error(`tmux pane not found for ${tmuxPaneId}`)
+    }
+
+    for (const key of Array.from(String(text || ""))) {
+      await tmuxExecWithSocket(
+        socketName,
+        "send-keys",
+        "-t",
+        tmuxPaneId,
+        encodeHumanKeypress(key),
+      )
+      await sleep(keyDelayMs)
+    }
+
+    return { ok: true }
+  })
+}
+
 async function sendKeys(sessionId, keys) {
   if (!Array.isArray(keys) || keys.length === 0) {
     throw new Error("keys must be a non-empty array")
@@ -565,6 +612,7 @@ module.exports = {
   tmuxExec,
   tmuxExecWithSocket,
   tmuxSessionName,
+  typeHumanToPane,
   typeToPane,
   typeText,
   resolveSocketName,

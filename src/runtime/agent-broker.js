@@ -11,7 +11,7 @@ const {
 const {
   readPane,
   sendKeysToPane,
-  typeToPane,
+  typeHumanToPane,
 } = require("./tmux-adapter")
 
 const DEFAULT_INTERVAL_MS = 500
@@ -98,7 +98,7 @@ async function deliverAttention(binding) {
     })
   }
 
-  await typeToPane(binding.tmuxPaneId, binding.sentinelText, {
+  await typeHumanToPane(binding.tmuxPaneId, binding.sentinelText, {
     socketName: binding.tmuxSocketName,
   })
 
