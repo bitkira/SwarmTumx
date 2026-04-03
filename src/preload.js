@@ -18,11 +18,15 @@ contextBridge.exposeInMainWorld("swarmTumx", {
   },
   tmux: {
     createSession: (options) => ipcRenderer.invoke("tmux:create-session", options),
+    describePane: (tmuxPaneId) => ipcRenderer.invoke("tmux:describe-pane", tmuxPaneId),
     listSessions: () => ipcRenderer.invoke("tmux:list-sessions"),
     describeSession: (sessionId) => ipcRenderer.invoke("tmux:describe-session", sessionId),
     sessionExists: (sessionId) => ipcRenderer.invoke("tmux:session-exists", sessionId),
+    readPane: (tmuxPaneId, options) => ipcRenderer.invoke("tmux:read-pane", tmuxPaneId, options),
     readSession: (sessionId, options) => ipcRenderer.invoke("tmux:read-session", sessionId, options),
+    typePane: (tmuxPaneId, text) => ipcRenderer.invoke("tmux:type-pane", tmuxPaneId, text),
     typeText: (sessionId, text) => ipcRenderer.invoke("tmux:type-text", sessionId, text),
+    sendKeysToPane: (tmuxPaneId, keys) => ipcRenderer.invoke("tmux:send-keys-pane", tmuxPaneId, keys),
     sendKeys: (sessionId, keys) => ipcRenderer.invoke("tmux:send-keys", sessionId, keys),
     resizeSession: (sessionId, cols, rows) =>
       ipcRenderer.invoke("tmux:resize-session", sessionId, cols, rows),

@@ -229,7 +229,7 @@ async function main() {
   }
 
   if (command === "broker-start") {
-    printJson(ensureBrokerDaemonRunning(__filename))
+    printJson(await ensureBrokerDaemonRunning(__filename))
     return
   }
 
@@ -239,7 +239,7 @@ async function main() {
   }
 
   if (command === "broker-stop") {
-    printJson(stopBrokerDaemon())
+    printJson(await stopBrokerDaemon())
     return
   }
 

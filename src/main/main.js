@@ -2,13 +2,17 @@ const path = require("node:path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const {
   createSession,
+  describePane,
   describeSession,
   killSession,
   listSessions,
+  readPane,
   readSession,
   resizeSession,
   sendKeys,
+  sendKeysToPane,
   sessionExists,
+  typeToPane,
   typeText,
 } = require("../runtime/tmux-adapter");
 const { TmuxTerminalManager } = require("../runtime/tmux-terminal-manager");
@@ -67,10 +71,14 @@ function registerIpc() {
     })
   );
   ipcMain.handle("tmux:list-sessions", () => listSessions());
+  ipcMain.handle("tmux:describe-pane", (_event, tmuxPaneId) => describePane(tmuxPaneId));
   ipcMain.handle("tmux:describe-session", (_event, sessionId) => describeSession(sessionId));
   ipcMain.handle("tmux:session-exists", (_event, sessionId) => sessionExists(sessionId));
+  ipcMain.handle("tmux:read-pane", (_event, tmuxPaneId, options) => readPane(tmuxPaneId, options));
   ipcMain.handle("tmux:read-session", (_event, sessionId, options) => readSession(sessionId, options));
+  ipcMain.handle("tmux:type-pane", (_event, tmuxPaneId, text) => typeToPane(tmuxPaneId, text));
   ipcMain.handle("tmux:type-text", (_event, sessionId, text) => typeText(sessionId, text));
+  ipcMain.handle("tmux:send-keys-pane", (_event, tmuxPaneId, keys) => sendKeysToPane(tmuxPaneId, keys));
   ipcMain.handle("tmux:send-keys", (_event, sessionId, keys) => sendKeys(sessionId, keys));
   ipcMain.handle("tmux:resize-session", (_event, sessionId, cols, rows) =>
     resizeSession(sessionId, cols, rows)

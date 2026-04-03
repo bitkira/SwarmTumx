@@ -5,6 +5,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 
 const { closeAgentDb } = require("../src/runtime/agent-db")
+const { stopBrokerDaemon } = require("../src/runtime/agent-broker")
 const {
   listRelations,
   login,
@@ -18,6 +19,12 @@ const {
   sendMessage,
   whoami,
 } = require("../src/runtime/agent-service")
+const {
+  createSession,
+  killSession,
+  sendKeysToPane,
+  typeToPane,
+} = require("../src/runtime/tmux-adapter")
 
 function runtimeContext(sessionId, paneId) {
   return {
@@ -32,6 +39,27 @@ function runtimeContext(sessionId, paneId) {
 test.afterEach(() => {
   closeAgentDb()
 })
+
+async function waitForJsonFile(filePath, timeoutMs = 5000) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf8").trim()
+      if (!raw) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        continue
+      }
+      try {
+        return JSON.parse(raw)
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        continue
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`timed out waiting for ${filePath}`)
+}
 
 test("login, whoami, logout and rebinding revoke old binding", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
@@ -131,6 +159,75 @@ test("relation request, accept, messaging, inbox and search flow", async () => {
   })
   assert.equal(bobSearch.results.length, 1)
   assert.equal(bobSearch.results[0].threadId, threadId)
+})
+
+test("request_relation requires an existing target account", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
+  process.env.SWARMTUMX_DATA_DIR = tempDir
+
+  const alice = runtimeContext("session-alice", "%251")
+  await login({ accountId: "alice", runtimeContext: alice })
+
+  await assert.rejects(
+    requestRelation({
+      runtimeContext: alice,
+      targetId: "missing-bob",
+    }),
+    /target account not found/,
+  )
+})
+
+test("tmux integration: createSession and login from inside pane", async (context) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
+  process.env.SWARMTUMX_DATA_DIR = tempDir
+
+  let session = null
+  try {
+    session = await createSession({
+      cwd: path.join(__dirname, ".."),
+    })
+  } catch (error) {
+    if (/tmux was not found/u.test(String(error.message || ""))) {
+      context.skip("tmux not available")
+      return
+    }
+    throw error
+  }
+
+  try {
+    const outputPath = path.join(tempDir, "login-output.json")
+    const cliPath = path.join(__dirname, "..", "bin", "swarmtumx-agent.cjs")
+    const command = `${process.execPath} ${cliPath} login integ_alice > ${outputPath}`
+
+    await typeToPane(session.tmuxPaneId, command, {
+      socketName: session.tmuxSocketName,
+    })
+    await sendKeysToPane(session.tmuxPaneId, ["Enter"], {
+      socketName: session.tmuxSocketName,
+    })
+
+    const parsed = await waitForJsonFile(outputPath)
+    assert.equal(parsed.account.accountId, "integ_alice")
+    assert.equal(parsed.binding.sessionId, session.sessionId)
+
+    const whoamiPath = path.join(tempDir, "whoami-output.json")
+    const whoamiCommand = `${process.execPath} ${cliPath} whoami > ${whoamiPath}`
+    await typeToPane(session.tmuxPaneId, whoamiCommand, {
+      socketName: session.tmuxSocketName,
+    })
+    await sendKeysToPane(session.tmuxPaneId, ["Enter"], {
+      socketName: session.tmuxSocketName,
+    })
+
+    const whoamiParsed = await waitForJsonFile(whoamiPath)
+    assert.equal(whoamiParsed.loggedIn, true)
+    assert.equal(whoamiParsed.binding.tmuxPaneId, session.tmuxPaneId)
+  } finally {
+    await stopBrokerDaemon().catch(() => {})
+    if (session) {
+      await killSession(session.sessionId)
+    }
+  }
 })
 
 test("remove relation blocks future direct messaging and notifies counterpart", async () => {

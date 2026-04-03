@@ -4,9 +4,9 @@ const path = require("node:path")
 const { spawn } = require("node:child_process")
 const { agentDataDir } = require("./agent-db")
 const {
-  cleanupMissingBindings,
   listActiveAutoWakeBindings,
   markDeliverySucceeded,
+  revokeBinding,
 } = require("./agent-service")
 const {
   readPane,
@@ -16,13 +16,22 @@ const {
 
 const DEFAULT_INTERVAL_MS = 500
 const DEFAULT_QUIET_MS = 2500
+const DEFAULT_MISSING_PANE_RETRIES = 3
 
 function brokerPidPath() {
   return path.join(agentDataDir(), "broker.pid")
 }
 
+function brokerStatusPath() {
+  return path.join(agentDataDir(), "broker-status.json")
+}
+
 function nowMs() {
   return Date.now()
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function isProcessAlive(pid) {
@@ -62,6 +71,22 @@ function clearBrokerPid(pid) {
   }
 }
 
+function writeBrokerHealth(health) {
+  try {
+    fs.writeFileSync(brokerStatusPath(), JSON.stringify(health, null, 2))
+  } catch {
+    // no-op
+  }
+}
+
+function readBrokerHealth() {
+  try {
+    return JSON.parse(fs.readFileSync(brokerStatusPath(), "utf8"))
+  } catch {
+    return null
+  }
+}
+
 function hashOutput(output) {
   return crypto.createHash("sha1").update(String(output || "")).digest("hex")
 }
@@ -87,6 +112,7 @@ async function deliverAttention(binding) {
 class AgentAttentionBroker {
   constructor(options = {}) {
     this.intervalMs = options.intervalMs || DEFAULT_INTERVAL_MS
+    this.missingPaneRetries = options.missingPaneRetries || DEFAULT_MISSING_PANE_RETRIES
     this.quietMs = options.quietMs || DEFAULT_QUIET_MS
     this.runtimeState = new Map()
     this.timer = null
@@ -99,8 +125,11 @@ class AgentAttentionBroker {
     }
     this.stopped = false
     this.timer = setInterval(() => {
-      this.tick().catch(() => {
-        // best-effort daemon loop
+      this.tick().catch((error) => {
+        this.recordHealth({
+          error,
+          scope: "tick",
+        })
       })
     }, this.intervalMs)
   }
@@ -113,6 +142,21 @@ class AgentAttentionBroker {
     }
   }
 
+  recordHealth(options = {}) {
+    writeBrokerHealth({
+      accountId: options.accountId || null,
+      bindingId: options.bindingId || null,
+      lastErrorAt: options.error ? new Date().toISOString() : null,
+      lastErrorMessage: options.error
+        ? (options.error.stack || options.error.message || String(options.error))
+        : null,
+      lastTickAt: new Date().toISOString(),
+      pid: process.pid,
+      running: true,
+      scope: options.scope || "tick",
+    })
+  }
+
   stateFor(accountId) {
     if (!this.runtimeState.has(accountId)) {
       this.runtimeState.set(accountId, {
@@ -121,6 +165,7 @@ class AgentAttentionBroker {
         lastDeliveryCompletedAt: 0,
         lastScreenChangedAt: 0,
         lastScreenHash: null,
+        missingSamples: 0,
         screenEpoch: 0,
       })
     }
@@ -132,7 +177,6 @@ class AgentAttentionBroker {
       return
     }
 
-    await cleanupMissingBindings()
     const bindings = listActiveAutoWakeBindings()
     const activeAccounts = new Set(bindings.map((binding) => binding.accountId))
     for (const accountId of this.runtimeState.keys()) {
@@ -142,17 +186,45 @@ class AgentAttentionBroker {
     }
 
     for (const binding of bindings) {
-      await this.tickBinding(binding)
+      try {
+        await this.tickBinding(binding)
+      } catch (error) {
+        this.recordHealth({
+          accountId: binding.accountId,
+          bindingId: binding.bindingId,
+          error,
+          scope: "binding",
+        })
+      }
     }
+
+    this.recordHealth({
+      scope: "tick",
+    })
   }
 
   async tickBinding(binding) {
     const state = this.stateFor(binding.accountId)
     const now = nowMs()
-    const paneRead = await readPane(binding.tmuxPaneId, {
-      screenOnly: true,
-      socketName: binding.tmuxSocketName,
-    })
+
+    let paneRead
+    try {
+      paneRead = await readPane(binding.tmuxPaneId, {
+        screenOnly: true,
+        socketName: binding.tmuxSocketName,
+      })
+      state.missingSamples = 0
+    } catch (error) {
+      if (/tmux pane not found/u.test(String(error?.message || ""))) {
+        state.missingSamples += 1
+        if (state.missingSamples >= this.missingPaneRetries) {
+          revokeBinding(binding.bindingId, "pane-missing")
+        }
+        return
+      }
+      throw error
+    }
+
     const nextHash = hashOutput(paneRead.output)
 
     if (state.lastScreenHash == null) {
@@ -205,12 +277,13 @@ class AgentAttentionBroker {
 function brokerStatus() {
   const pid = readBrokerPid()
   return {
+    health: readBrokerHealth(),
     pid,
     running: isProcessAlive(pid),
   }
 }
 
-function ensureBrokerDaemonRunning(cliPath) {
+async function ensureBrokerDaemonRunning(cliPath) {
   const status = brokerStatus()
   if (status.running) {
     return status
@@ -230,32 +303,68 @@ function ensureBrokerDaemonRunning(cliPath) {
   )
 
   child.unref()
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100)
+    const nextStatus = brokerStatus()
+    if (nextStatus.running || readBrokerPid() === child.pid) {
+      return {
+        ...nextStatus,
+        pid: child.pid,
+        running: true,
+        started: true,
+      }
+    }
+  }
+
   return {
+    health: readBrokerHealth(),
     pid: child.pid,
-    running: true,
-    started: true,
+    running: isProcessAlive(child.pid),
+    started: isProcessAlive(child.pid),
   }
 }
 
-function stopBrokerDaemon() {
+async function stopBrokerDaemon() {
   const pid = readBrokerPid()
   if (!isProcessAlive(pid)) {
     clearBrokerPid(pid)
     return {
+      health: readBrokerHealth(),
       ok: true,
       running: false,
     }
   }
 
   process.kill(pid, "SIGTERM")
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100)
+    if (!isProcessAlive(pid)) {
+      clearBrokerPid(pid)
+      return {
+        health: readBrokerHealth(),
+        ok: true,
+        pid,
+        running: false,
+      }
+    }
+  }
+
   return {
-    ok: true,
-    running: false,
+    health: readBrokerHealth(),
+    ok: false,
     pid,
+    running: isProcessAlive(pid),
   }
 }
 
 async function runBrokerLoop(options = {}) {
+  const existingPid = readBrokerPid()
+  if (isProcessAlive(existingPid) && existingPid !== process.pid) {
+    return
+  }
+
   writeBrokerPid(process.pid)
   const broker = new AgentAttentionBroker(options)
   const shutdown = async () => {

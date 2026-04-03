@@ -2,12 +2,16 @@
 
 const {
   createSession,
+  describePane,
   killSession,
   listSessions,
+  readPane,
   readSession,
   resizeSession,
   sendKeys,
+  sendKeysToPane,
   sessionExists,
+  typeToPane,
   typeText,
 } = require("../src/runtime/tmux-adapter");
 
@@ -23,8 +27,12 @@ function usage() {
       "  swarmtumx-bridge list",
       "  swarmtumx-bridge exists <sessionId>",
       "  swarmtumx-bridge read <sessionId> [lines]",
+      "  swarmtumx-bridge describe-pane <tmuxPaneId>",
+      "  swarmtumx-bridge read-pane <tmuxPaneId> [lines]",
       "  swarmtumx-bridge type <sessionId> <text>",
+      "  swarmtumx-bridge type-pane <tmuxPaneId> <text>",
       "  swarmtumx-bridge keys <sessionId> <key...>",
+      "  swarmtumx-bridge keys-pane <tmuxPaneId> <key...>",
       "  swarmtumx-bridge resize <sessionId> <cols> <rows>",
       "  swarmtumx-bridge kill <sessionId>",
     ].join("\n"),
@@ -72,6 +80,19 @@ async function main() {
     return;
   }
 
+  if (command === "describe-pane") {
+    printJson(await describePane(args[0]));
+    return;
+  }
+
+  if (command === "read-pane") {
+    const [tmuxPaneId, lines] = args;
+    printJson(await readPane(tmuxPaneId, {
+      lines: lines ? Number(lines) : undefined,
+    }));
+    return;
+  }
+
   if (command === "type") {
     const [sessionId, ...textParts] = args;
     await typeText(sessionId, textParts.join(" "));
@@ -79,9 +100,23 @@ async function main() {
     return;
   }
 
+  if (command === "type-pane") {
+    const [tmuxPaneId, ...textParts] = args;
+    await typeToPane(tmuxPaneId, textParts.join(" "));
+    printJson({ ok: true });
+    return;
+  }
+
   if (command === "keys") {
     const [sessionId, ...keys] = args;
     await sendKeys(sessionId, keys);
+    printJson({ ok: true });
+    return;
+  }
+
+  if (command === "keys-pane") {
+    const [tmuxPaneId, ...keys] = args;
+    await sendKeysToPane(tmuxPaneId, keys);
     printJson({ ok: true });
     return;
   }

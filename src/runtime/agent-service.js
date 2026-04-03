@@ -598,17 +598,28 @@ async function requestRelation(options = {}) {
     throw new Error("cannot request relation with self")
   }
 
-  const activeRelation = getActiveRelationRow(requesterAccountId, targetId)
-  if (activeRelation) {
-    return {
-      created: false,
-      relation: rowToRelation(activeRelation),
-      request: null,
-    }
-  }
-
   return withTransaction((db) => {
-    ensureAccountRow(db, targetId, { accountType: "agent" })
+    const targetAccountRow = db
+      .prepare("SELECT * FROM accounts WHERE account_id = ?")
+      .get(targetId)
+    if (!targetAccountRow) {
+      throw new Error(`target account not found for ${targetId}`)
+    }
+
+    const activeRelation = db.prepare(`
+      SELECT *
+      FROM relations
+      WHERE normalized_pair_key = ?
+        AND status = 'active'
+    `).get(directPair(requesterAccountId, targetId).normalizedPairKey)
+
+    if (activeRelation) {
+      return {
+        created: false,
+        relation: rowToRelation(activeRelation),
+        request: null,
+      }
+    }
 
     const existing = db.prepare(`
       SELECT *
@@ -823,12 +834,18 @@ async function sendMessage(options = {}) {
     throw new Error("cannot message self")
   }
 
-  const activeRelation = getActiveRelationRow(binding.accountId, targetAccountId)
-  if (!activeRelation) {
-    throw new Error(`active relation required for ${targetAccountId}`)
-  }
-
   return withTransaction((db) => {
+    const activeRelation = db.prepare(`
+      SELECT *
+      FROM relations
+      WHERE normalized_pair_key = ?
+        AND status = 'active'
+    `).get(directPair(binding.accountId, targetAccountId).normalizedPairKey)
+
+    if (!activeRelation) {
+      throw new Error(`active relation required for ${targetAccountId}`)
+    }
+
     const thread = ensureThreadRow(db, binding.accountId, targetAccountId)
     const messageId = createId("msg")
     const threadSeqRow = db.prepare(`
