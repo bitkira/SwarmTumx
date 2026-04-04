@@ -17,6 +17,7 @@ const {
 const DEFAULT_INTERVAL_MS = 500
 const DEFAULT_QUIET_MS = 2500
 const DEFAULT_MISSING_PANE_RETRIES = 3
+const DEFAULT_TRIGGER_SETTLE_MS = 75
 
 function brokerPidPath() {
   return path.join(agentDataDir(), "broker.pid")
@@ -103,6 +104,7 @@ async function deliverAttention(binding) {
   })
 
   if (binding.triggerKeys.length > 0) {
+    await sleep(DEFAULT_TRIGGER_SETTLE_MS)
     await sendKeysToPane(binding.tmuxPaneId, binding.triggerKeys, {
       socketName: binding.tmuxSocketName,
     })
