@@ -86,6 +86,10 @@ function getWorkspaceRoot() {
     return app.getAppPath();
   }
 
+  if (app?.isPackaged) {
+    return app.getPath("home");
+  }
+
   return process.cwd();
 }
 

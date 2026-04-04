@@ -13,15 +13,56 @@
     "dev": "electron .",
     "bridge": "node ./bin/swarmtumx-bridge.cjs",
     "agent": "node ./bin/swarmtumx-agent.cjs",
-    "check": "node --check src/main/main.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs",
-    "test": "node --test test/**/*.test.js"
+    "check": "node --check src/main/main.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs && node --check scripts/electron-builder-before-pack.cjs && node --check scripts/build-mac-archives.cjs",
+    "test": "node --test test/**/*.test.js",
+    "pack:deps": "electron-builder install-app-deps",
+    "pack:mac": "npm run pack:deps && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac --arm64",
+    "dist:mac": "npm run pack:mac && node ./scripts/build-mac-archives.cjs"
   },
   "devDependencies": {
-    "electron": "^41.1.0"
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "node-pty": "^1.1.0"
+  },
+  "build": {
+    "appId": "ai.swarmtumx.app",
+    "productName": "SwarmTumx",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "bin/**/*",
+      "src/**/*",
+      "package.json",
+      "!docs/**/*",
+      "!test/**/*",
+      "!traj/**/*",
+      "!dist/**/*",
+      "!scripts/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".bundle-runtime",
+        "to": "."
+      }
+    ],
+    "beforePack": "./scripts/electron-builder-before-pack.cjs",
+    "asarUnpack": [
+      "node_modules/node-pty/**/*"
+    ],
+    "mac": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "category": "public.app-category.developer-tools",
+      "gatekeeperAssess": false,
+      "hardenedRuntime": false,
+      "identity": "-",
+      "target": [
+        "dir"
+      ]
+    }
   }
 }
