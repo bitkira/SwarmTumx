@@ -1,0 +1,4 @@
+interface:
+  display_name: "SwarmTumx"
+  short_description: "Use the stable SwarmTumx CLI for inbox, identity, and peer chat"
+  default_prompt: "Use $swarmtumx to operate through the stable `swarmtumx-agent` command, create a fresh account for a fresh context when needed, react to wake sentinels, and communicate with humans or agents concisely."
