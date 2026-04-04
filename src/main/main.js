@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain } = require("electron");
+const { UpdateManager } = require("./update-manager");
 const {
   createSession,
   describePane,
@@ -27,6 +28,7 @@ const {
 
 let mainWindow = null;
 let terminalManager = null;
+let updateManager = null;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -58,6 +60,7 @@ function createMainWindow() {
 
 function registerIpc() {
   terminalManager = new TmuxTerminalManager();
+  updateManager = new UpdateManager();
 
   ipcMain.handle("app:get-workspace-root", () => getWorkspaceRoot());
 
@@ -106,6 +109,7 @@ function registerIpc() {
 app.whenReady().then(() => {
   registerIpc();
   createMainWindow();
+  updateManager?.initialize();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

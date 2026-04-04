@@ -1,6 +1,6 @@
 {
   "name": "swarmtumx",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "tmux-first infinite canvas terminals for macOS",
   "main": "src/main/main.js",
@@ -13,7 +13,7 @@
     "dev": "electron .",
     "bridge": "node ./bin/swarmtumx-bridge.cjs",
     "agent": "node ./bin/swarmtumx-agent.cjs",
-    "check": "node --check src/main/main.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs && node --check scripts/electron-builder-before-pack.cjs && node --check scripts/build-mac-archives.cjs",
+    "check": "node --check src/main/main.js && node --check src/main/update-manager.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs && node --check scripts/electron-builder-before-pack.cjs && node --check scripts/build-mac-archives.cjs",
     "test": "node --test test/**/*.test.js",
     "pack:deps": "electron-builder install-app-deps",
     "pack:mac": "npm run pack:deps && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac --arm64",
