@@ -140,9 +140,26 @@ function parsePaneFields(output) {
   }
 }
 
+function tmuxErrorText(error) {
+  return [
+    error?.stderr || "",
+    error?.message || "",
+  ]
+    .join("\n")
+    .toLowerCase()
+}
+
 function isMissingSessionError(error) {
-  const message = String(error?.stderr || error?.message || "")
-  return /can't find session|no server running|error connecting .*no such file or directory/u.test(message)
+  const message = tmuxErrorText(error)
+  return (
+    message.includes("can't find session")
+    || message.includes("no server running")
+    || message.includes("failed to connect to server")
+    || (
+      message.includes("error connecting to")
+      && message.includes("no such file or directory")
+    )
+  )
 }
 
 function createSessionId() {
