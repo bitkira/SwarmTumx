@@ -4,6 +4,10 @@
   "private": true,
   "description": "tmux-first infinite canvas terminals for macOS",
   "main": "src/main/main.js",
+  "bin": {
+    "swarmtumx-agent": "./bin/swarmtumx-agent.cjs",
+    "swarmtumx-bridge": "./bin/swarmtumx-bridge.cjs"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "electron .",

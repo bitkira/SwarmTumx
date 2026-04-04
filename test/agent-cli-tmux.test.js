@@ -127,3 +127,38 @@ test("agent CLI works inside real tmux panes", { skip: !hasTmux() }, async () =>
     await killSession(bobSession.sessionId)
   }
 })
+
+test("agent CLI login --new creates a fresh account inside tmux", { skip: !hasTmux() }, async () => {
+  const repoRoot = path.resolve(__dirname, "..")
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-cli-"))
+  const dataDir = path.join(tempDir, "data")
+  fs.mkdirSync(dataDir, { recursive: true })
+
+  const session = await createSession({ cwd: repoRoot, cols: 100, rows: 28 })
+  const out = (name) => path.join(tempDir, `${name}.json`)
+  const prefix = `cd ${shellEscape(repoRoot)} && SWARMTUMX_DATA_DIR=${shellEscape(dataDir)}`
+
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    const loginResult = await runAgentCommandInSession(
+      session.sessionId,
+      `${prefix} node ./bin/swarmtumx-agent.cjs login --new --display-name ${shellEscape("Fresh Agent")} --trigger-keys Enter`,
+      out("fresh-login"),
+    )
+
+    assert.match(loginResult.account.accountId, /^fresh-agent_[0-9a-f-]+$/u)
+    assert.equal(loginResult.account.displayName, "Fresh Agent")
+
+    const whoamiResult = await runAgentCommandInSession(
+      session.sessionId,
+      `${prefix} node ./bin/swarmtumx-agent.cjs whoami`,
+      out("fresh-whoami"),
+    )
+
+    assert.equal(whoamiResult.loggedIn, true)
+    assert.equal(whoamiResult.account.accountId, loginResult.account.accountId)
+  } finally {
+    await killSession(session.sessionId)
+  }
+})

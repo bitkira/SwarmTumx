@@ -84,6 +84,7 @@ function usage() {
     [
       "Usage:",
       "  swarmtumx-agent login <account_id> [--display-name <name>] [--auto-wake <true|false>]",
+      "  swarmtumx-agent login --new [--display-name <name>] [--prefix <account_prefix>] [--auto-wake <true|false>]",
       "  swarmtumx-agent whoami",
       "  swarmtumx-agent logout",
       "  swarmtumx-agent send_message <target_account_id> <body...>",
@@ -125,13 +126,27 @@ async function main() {
     return
   }
 
+  if (["help", "--help", "-h"].includes(command)) {
+    usage()
+    return
+  }
+
   const { flags, positionals } = parseFlagArgs(rest)
 
   if (command === "login") {
     const [accountId] = positionals
+    const createFresh = parseBoolean(flags.new, false)
+    if (createFresh && accountId) {
+      throw new Error("login accepts either <account_id> or --new, not both")
+    }
+    if (!createFresh && !accountId) {
+      throw new Error("login requires <account_id> or --new")
+    }
     const result = await login({
       accountId,
+      accountIdPrefix: flags.prefix,
       autoWakeEnabled: parseBoolean(flags["auto-wake"], true),
+      createFresh,
       displayName: flags["display-name"],
       preludeKeys: parseList(flags["prelude-keys"]),
       runtimeKind: flags["runtime-kind"] || "agent",

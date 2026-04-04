@@ -7,8 +7,9 @@ const {
 } = require("./agent-db")
 
 const DEFAULT_SENTINEL_TEXT = "[SWARMTUMX_NOTIFY] pending inbox items; use read_inbox"
-const DEFAULT_TRIGGER_KEYS = ["Tab"]
+const DEFAULT_TRIGGER_KEYS = ["Enter"]
 const SWARMTUMX_SESSION_PREFIX = "swarmtumx-"
+let legacyTriggerKeyMigrationApplied = false
 
 function normalizeAccountId(value) {
   const normalized = String(value || "").trim()
@@ -27,6 +28,22 @@ function normalizeOptionalString(value) {
   }
   const normalized = String(value).trim()
   return normalized || null
+}
+
+function normalizeAccountPrefix(value, fallback = "agent") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/gu, "-")
+    .replace(/^[._-]+|[._-]+$/gu, "")
+  return normalized || fallback
+}
+
+function createFreshAccountId(options = {}) {
+  const prefix = normalizeAccountPrefix(
+    options.accountIdPrefix || options.displayName || options.runtimeKind || "agent",
+  )
+  return createId(prefix)
 }
 
 function normalizeTriggerKeys(triggerKeys) {
@@ -60,6 +77,23 @@ function parseJsonArray(value) {
 
 function serializeJsonArray(value) {
   return JSON.stringify(Array.isArray(value) ? value : [])
+}
+
+function ensureLegacyTriggerKeysMigrated() {
+  if (legacyTriggerKeyMigrationApplied) {
+    return
+  }
+
+  getAgentDb()
+    .prepare(`
+      UPDATE runtime_bindings
+      SET trigger_keys_json = ?
+      WHERE runtime_kind = 'agent'
+        AND trigger_keys_json = ?
+    `)
+    .run(serializeJsonArray(DEFAULT_TRIGGER_KEYS), serializeJsonArray(["Tab"]))
+
+  legacyTriggerKeyMigrationApplied = true
 }
 
 function rowToAccount(row) {
@@ -393,6 +427,7 @@ function touchBinding(bindingId) {
 }
 
 async function getCurrentBinding(options = {}) {
+  ensureLegacyTriggerKeysMigrated()
   const runtime = await resolveCurrentRuntimeContext(options)
   const row = getBindingRowByPane(runtime.tmuxSocketName, runtime.tmuxPaneId)
   if (!row) {
@@ -444,10 +479,18 @@ async function whoami(options = {}) {
 }
 
 async function login(options = {}) {
+  ensureLegacyTriggerKeysMigrated()
   const runtime = await resolveCurrentRuntimeContext(options)
-  const accountId = normalizeAccountId(options.accountId)
   const displayName = normalizeOptionalString(options.displayName)
   const runtimeKind = options.runtimeKind || "agent"
+  const createFresh = options.createFresh === true
+  const accountId = createFresh
+    ? createFreshAccountId({
+        accountIdPrefix: options.accountIdPrefix,
+        displayName,
+        runtimeKind,
+      })
+    : normalizeAccountId(options.accountId)
   const autoWakeEnabled = options.autoWakeEnabled !== false
   const sentinelText = normalizeOptionalString(options.sentinelText) || DEFAULT_SENTINEL_TEXT
   const preludeKeys = normalizePreludeKeys(options.preludeKeys)
@@ -1147,6 +1190,7 @@ async function searchMessages(options = {}) {
 }
 
 function listActiveAutoWakeBindings() {
+  ensureLegacyTriggerKeysMigrated()
   return getAgentDb()
     .prepare(`
       SELECT
@@ -1216,6 +1260,7 @@ async function cleanupMissingBindings() {
 module.exports = {
   DEFAULT_SENTINEL_TEXT,
   cleanupMissingBindings,
+  createFreshAccountId,
   getAccountById,
   getActiveRelationRow,
   getCurrentBinding,

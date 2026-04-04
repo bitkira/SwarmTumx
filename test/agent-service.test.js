@@ -98,6 +98,28 @@ test("login, whoami, logout and rebinding revoke old binding", async () => {
   assert.equal(finalWhoami.loggedIn, false)
 })
 
+test("login can create a fresh account id for a new context", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
+  process.env.SWARMTUMX_DATA_DIR = tempDir
+
+  const alpha = runtimeContext("session-fresh", "%151")
+
+  const result = await login({
+    createFresh: true,
+    displayName: "Alpha Agent",
+    runtimeContext: alpha,
+  })
+
+  assert.match(result.account.accountId, /^alpha-agent_[0-9a-f-]+$/u)
+  assert.equal(result.account.displayName, "Alpha Agent")
+  assert.equal(result.binding.accountId, result.account.accountId)
+  assert.deepEqual(result.binding.triggerKeys, ["Enter"])
+
+  const current = await whoami({ runtimeContext: alpha })
+  assert.equal(current.loggedIn, true)
+  assert.equal(current.account.accountId, result.account.accountId)
+})
+
 test("relation request, accept, messaging, inbox and search flow", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
   process.env.SWARMTUMX_DATA_DIR = tempDir
