@@ -66,7 +66,7 @@ function tmuxEnv() {
   return env
 }
 
-function baseArgs(socketName = SOCKET_NAME) {
+function baseArgs(socketName) {
   const args = ["-L", resolveSocketName(socketName), "-u"]
   const tmuxConf = getTmuxConf()
   if (tmuxConf) {

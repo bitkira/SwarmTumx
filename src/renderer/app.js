@@ -322,7 +322,7 @@ function positionTile(tile, dom) {
   dom.container.style.top = `${screenY}px`
   dom.container.style.width = `${tile.width}px`
   dom.container.style.height = `${tile.height}px`
-  dom.container.style.transform = `scale(${state.viewport.zoom})`
+  dom.container.style.transform = "none"
   dom.container.style.zIndex = String(tile.zIndex)
 }
 
@@ -400,6 +400,21 @@ function focusTerminal(sessionId) {
   }
 
   binding.terminal.focus()
+}
+
+function wheelDeltaToLines(event) {
+  const direction = event.deltaY < 0 ? -1 : 1
+  const magnitude = Math.abs(event.deltaY)
+
+  if (event.deltaMode === 1) {
+    return direction * Math.max(1, Math.round(magnitude))
+  }
+
+  if (event.deltaMode === 2) {
+    return direction * DEFAULT_TERMINAL_ROWS
+  }
+
+  return direction * Math.max(1, Math.round(magnitude / 40))
 }
 
 function writeTerminalNotice(sessionId, prefix, error) {
@@ -504,6 +519,20 @@ async function attachTerminal(tile, dom) {
   const fitAddon = new FitAddonClass()
   terminal.loadAddon(fitAddon)
   terminal.open(dom.terminalMount)
+  terminal.attachCustomWheelEventHandler((event) => {
+    const activeBuffer = terminal.buffer.active
+    const hasScrollback = activeBuffer.type === "normal" && activeBuffer.baseY > 0
+
+    if (hasScrollback) {
+      event.preventDefault()
+      event.stopPropagation()
+      terminal.scrollLines(wheelDeltaToLines(event))
+      return false
+    }
+
+    event.stopPropagation()
+    return true
+  })
   terminal.textarea?.setAttribute("spellcheck", "false")
   terminal.textarea?.setAttribute("aria-label", `${tile.cwd || "terminal"}`)
 
@@ -716,6 +745,7 @@ function wireTileEvents(tile, dom) {
 
   dom.container.addEventListener("pointerdown", (event) => {
     const resizeHandle = event.target.closest("[data-resize-dir]")
+    const terminalRegion = event.target.closest(".tile-terminal")
 
     if (resizeHandle) {
       activateTile(tile.id, { save: true })
@@ -735,6 +765,11 @@ function wireTileEvents(tile, dom) {
       event.preventDefault()
       event.stopPropagation()
       beginDrag(tile.id, event.clientX, event.clientY)
+      return
+    }
+
+    if (terminalRegion) {
+      activateTile(tile.id, { save: true })
       return
     }
 
@@ -1054,18 +1089,18 @@ window.addEventListener("pointermove", (event) => {
     return
   }
 
-  const deltaX = (event.clientX - startClientX) / state.viewport.zoom
-  const deltaY = (event.clientY - startClientY) / state.viewport.zoom
+  const rawDeltaX = event.clientX - startClientX
+  const rawDeltaY = event.clientY - startClientY
 
   if (type === "drag") {
-    tile.x = state.interaction.startX + deltaX
-    tile.y = state.interaction.startY + deltaY
+    tile.x = state.interaction.startX + rawDeltaX / state.viewport.zoom
+    tile.y = state.interaction.startY + rawDeltaY / state.viewport.zoom
     positionAllTiles()
     return
   }
 
   if (type === "resize") {
-    applyResize(tile, state.interaction.dir, deltaX, deltaY)
+    applyResize(tile, state.interaction.dir, rawDeltaX, rawDeltaY)
     positionAllTiles()
     scheduleTerminalFit(tile.sessionId)
   }
