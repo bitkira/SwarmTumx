@@ -402,21 +402,6 @@ function focusTerminal(sessionId) {
   binding.terminal.focus()
 }
 
-function wheelDeltaToLines(event) {
-  const direction = event.deltaY < 0 ? -1 : 1
-  const magnitude = Math.abs(event.deltaY)
-
-  if (event.deltaMode === 1) {
-    return direction * Math.max(1, Math.round(magnitude))
-  }
-
-  if (event.deltaMode === 2) {
-    return direction * DEFAULT_TERMINAL_ROWS
-  }
-
-  return direction * Math.max(1, Math.round(magnitude / 40))
-}
-
 function writeTerminalNotice(sessionId, prefix, error) {
   const binding = getTerminalBinding(sessionId)
   if (!binding || binding.disposed) {
@@ -519,20 +504,6 @@ async function attachTerminal(tile, dom) {
   const fitAddon = new FitAddonClass()
   terminal.loadAddon(fitAddon)
   terminal.open(dom.terminalMount)
-  terminal.attachCustomWheelEventHandler((event) => {
-    const activeBuffer = terminal.buffer.active
-    const hasScrollback = activeBuffer.type === "normal" && activeBuffer.baseY > 0
-
-    if (hasScrollback) {
-      event.preventDefault()
-      event.stopPropagation()
-      terminal.scrollLines(wheelDeltaToLines(event))
-      return false
-    }
-
-    event.stopPropagation()
-    return true
-  })
   terminal.textarea?.setAttribute("spellcheck", "false")
   terminal.textarea?.setAttribute("aria-label", `${tile.cwd || "terminal"}`)
 
