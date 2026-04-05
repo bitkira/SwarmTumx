@@ -1,3 +1,4 @@
+const fs = require("node:fs");
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const { UpdateManager } = require("./update-manager");
@@ -29,6 +30,19 @@ const {
 let mainWindow = null;
 let terminalManager = null;
 let updateManager = null;
+
+function configureAppIcon() {
+  if (process.platform !== "darwin" || app.isPackaged || !app.dock?.setIcon) {
+    return;
+  }
+
+  const iconPath = path.join(getWorkspaceRoot(), "swarm.png");
+  if (!fs.existsSync(iconPath)) {
+    return;
+  }
+
+  app.dock.setIcon(iconPath);
+}
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -108,6 +122,7 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   registerIpc();
+  configureAppIcon();
   createMainWindow();
   updateManager?.initialize();
 

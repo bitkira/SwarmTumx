@@ -1,6 +1,6 @@
 {
   "name": "swarmtumx",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "tmux-first infinite canvas terminals for macOS",
   "main": "src/main/main.js",
@@ -13,10 +13,11 @@
     "dev": "electron .",
     "bridge": "node ./bin/swarmtumx-bridge.cjs",
     "agent": "node ./bin/swarmtumx-agent.cjs",
-    "check": "node --check src/main/main.js && node --check src/main/update-manager.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs && node --check scripts/electron-builder-before-pack.cjs && node --check scripts/build-mac-archives.cjs",
+    "check": "node --check src/main/main.js && node --check src/main/update-manager.js && node --check src/preload.js && node --check src/runtime/paths.js && node --check src/runtime/state-store.js && node --check src/runtime/agent-db.js && node --check src/runtime/agent-service.js && node --check src/runtime/agent-broker.js && node --check src/runtime/tmux-adapter.js && node --check src/runtime/tmux-terminal-manager.js && node --check src/renderer/app.js && node --check bin/swarmtumx-bridge.cjs && node --check bin/swarmtumx-agent.cjs && node --check scripts/electron-builder-before-pack.cjs && node --check scripts/build-mac-archives.cjs && node --check scripts/generate-app-icon.cjs",
     "test": "node --test test/**/*.test.js",
+    "icon:mac": "node ./scripts/generate-app-icon.cjs",
     "pack:deps": "electron-builder install-app-deps",
-    "pack:mac": "npm run pack:deps && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac --arm64",
+    "pack:mac": "npm run icon:mac && npm run pack:deps && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac --arm64",
     "dist:mac": "npm run pack:mac && node ./scripts/build-mac-archives.cjs"
   },
   "devDependencies": {
@@ -59,6 +60,7 @@
       "category": "public.app-category.developer-tools",
       "gatekeeperAssess": false,
       "hardenedRuntime": false,
+      "icon": "build/icon.icns",
       "identity": "-",
       "target": [
         "dir"

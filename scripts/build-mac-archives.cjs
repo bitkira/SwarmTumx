@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -12,6 +13,7 @@ const ARCH = process.arch;
 const APP_PATH = path.join(DIST_DIR, `mac-${ARCH}`, `${PRODUCT_NAME}.app`);
 const ZIP_PATH = path.join(DIST_DIR, `${PRODUCT_NAME}-${VERSION}-${ARCH}.zip`);
 const DMG_PATH = path.join(DIST_DIR, `${PRODUCT_NAME}-${VERSION}-${ARCH}.dmg`);
+const SUMS_PATH = path.join(DIST_DIR, "SHA256SUMS.txt");
 
 function run(bin, args, options = {}) {
   execFileSync(bin, args, {
@@ -68,6 +70,21 @@ function buildDmg() {
   }
 }
 
+function sha256File(filePath) {
+  const hash = crypto.createHash("sha256");
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest("hex");
+}
+
+function writeSha256Sums() {
+  const lines = [
+    `${sha256File(DMG_PATH)}  ${path.basename(DMG_PATH)}`,
+    `${sha256File(ZIP_PATH)}  ${path.basename(ZIP_PATH)}`,
+  ];
+
+  fs.writeFileSync(SUMS_PATH, `${lines.join("\n")}\n`);
+}
+
 function main() {
   if (process.platform !== "darwin") {
     throw new Error("mac archives can only be built on darwin.");
@@ -77,6 +94,7 @@ function main() {
   buildZip();
   buildDmg();
   removeBuilderExtras();
+  writeSha256Sums();
 }
 
 main();
