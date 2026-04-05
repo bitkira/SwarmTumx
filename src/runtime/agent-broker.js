@@ -93,13 +93,15 @@ function hashOutput(output) {
 }
 
 async function deliverAttention(binding) {
+  const attentionText = binding.attentionText || binding.sentinelText
+
   if (binding.preludeKeys.length > 0) {
     await sendKeysToPane(binding.tmuxPaneId, binding.preludeKeys, {
       socketName: binding.tmuxSocketName,
     })
   }
 
-  await typeHumanToPane(binding.tmuxPaneId, binding.sentinelText, {
+  await typeHumanToPane(binding.tmuxPaneId, attentionText, {
     socketName: binding.tmuxSocketName,
   })
 
@@ -208,6 +210,7 @@ class AgentAttentionBroker {
   async tickBinding(binding) {
     const state = this.stateFor(binding.accountId)
     const now = nowMs()
+    const latestAttentionEventSeq = Number(binding.latestAttentionEventSeq || 0)
 
     let paneRead
     try {
@@ -243,7 +246,7 @@ class AgentAttentionBroker {
       return
     }
 
-    if (binding.latestEventSeq <= binding.lastDeliveredEventSeq) {
+    if (latestAttentionEventSeq <= binding.lastDeliveredEventSeq) {
       return
     }
 
@@ -268,7 +271,7 @@ class AgentAttentionBroker {
     state.lastDeliveryAttemptAt = now
     try {
       await deliverAttention(binding)
-      markDeliverySucceeded(binding.accountId, binding.latestEventSeq)
+      markDeliverySucceeded(binding.accountId, latestAttentionEventSeq)
       state.lastDeliveryCompletedAt = nowMs()
     } finally {
       state.deliveryInFlight = false

@@ -7,6 +7,9 @@ const {
 } = require("./agent-db")
 
 const DEFAULT_SENTINEL_TEXT = "[SWARMTUMX_NOTIFY] pending inbox items; use read_inbox"
+const RELATION_REQUESTS_ACCEPTED_TEXT = "[SWARMTUMX_NOTIFY] relation requests accepted"
+const RELATION_REQUESTS_DECLINED_TEXT = "[SWARMTUMX_NOTIFY] relation requests declined"
+const RELATION_REQUEST_UPDATES_TEXT = "[SWARMTUMX_NOTIFY] relation request updates"
 const DEFAULT_TRIGGER_KEYS = ["Enter"]
 const SWARMTUMX_SESSION_PREFIX = "swarmtumx-"
 let legacyTriggerKeyMigrationApplied = false
@@ -459,6 +462,209 @@ function getThreadMembershipRow(accountId, threadId) {
         AND participant_id = ?
     `)
     .get(threadId, accountId)
+}
+
+function listPendingRelationRequestsForAccount(db, accountId) {
+  return db.prepare(`
+    SELECT
+      relation_requests.*,
+      accounts.display_name AS requester_display_name
+    FROM relation_requests
+    LEFT JOIN accounts
+      ON accounts.account_id = relation_requests.requester_account_id
+    WHERE relation_requests.status = 'pending'
+      AND relation_requests.target_kind = 'account'
+      AND relation_requests.target_id = ?
+    ORDER BY relation_requests.created_at ASC
+  `).all(accountId).map((row) => ({
+    ...rowToRelationRequest(row),
+    requesterDisplayName: row.requester_display_name,
+  }))
+}
+
+function listUnreadThreadsForAccount(db, accountId) {
+  return db.prepare(`
+    SELECT
+      tp.thread_id,
+      tp.last_read_thread_seq,
+      other.participant_id AS counterpart_account_id,
+      accounts.display_name AS counterpart_display_name,
+      (
+        SELECT COALESCE(MAX(m.thread_seq), 0)
+        FROM messages m
+        WHERE m.thread_id = tp.thread_id
+      ) AS latest_thread_seq,
+      (
+        SELECT COUNT(*)
+        FROM messages m
+        WHERE m.thread_id = tp.thread_id
+          AND m.thread_seq > tp.last_read_thread_seq
+          AND m.sender_account_id != tp.participant_id
+      ) AS unread_incoming_count,
+      (
+        SELECT m.body
+        FROM messages m
+        WHERE m.thread_id = tp.thread_id
+        ORDER BY m.thread_seq DESC
+        LIMIT 1
+      ) AS latest_message_body,
+      (
+        SELECT m.created_at
+        FROM messages m
+        WHERE m.thread_id = tp.thread_id
+        ORDER BY m.thread_seq DESC
+        LIMIT 1
+      ) AS latest_message_created_at,
+      (
+        SELECT m.sender_account_id
+        FROM messages m
+        WHERE m.thread_id = tp.thread_id
+        ORDER BY m.thread_seq DESC
+        LIMIT 1
+      ) AS latest_message_sender_account_id
+    FROM thread_participants tp
+    JOIN thread_participants other
+      ON other.thread_id = tp.thread_id
+     AND other.participant_kind = 'account'
+     AND other.participant_id != tp.participant_id
+    LEFT JOIN accounts
+      ON accounts.account_id = other.participant_id
+    WHERE tp.participant_kind = 'account'
+      AND tp.participant_id = ?
+    ORDER BY latest_message_created_at DESC
+  `).all(accountId)
+    .filter((row) => Number(row.unread_incoming_count || 0) > 0)
+    .map((row) => ({
+      counterpartAccountId: row.counterpart_account_id,
+      counterpartDisplayName: row.counterpart_display_name,
+      lastReadThreadSeq: Number(row.last_read_thread_seq || 0),
+      latestMessage: row.latest_message_body
+        ? {
+            body: row.latest_message_body,
+            createdAt: row.latest_message_created_at,
+            senderAccountId: row.latest_message_sender_account_id,
+            threadSeq: Number(row.latest_thread_seq || 0),
+          }
+        : null,
+      threadId: row.thread_id,
+      unreadCount: Number(row.unread_incoming_count || 0),
+    }))
+}
+
+function getLatestInboxAttentionEventSeq(accountId, options = {}) {
+  const db = options.db || getAgentDb()
+  const pendingRelationRequestEventSeq = Number(
+    db.prepare(`
+      SELECT COALESCE(MAX(inbox_events.event_seq), 0) AS max_event_seq
+      FROM relation_requests
+      JOIN inbox_events
+        ON inbox_events.owner_account_id = relation_requests.target_id
+       AND inbox_events.relation_request_id = relation_requests.request_id
+       AND inbox_events.event_kind = 'relation_request_received'
+      WHERE relation_requests.status = 'pending'
+        AND relation_requests.target_kind = 'account'
+        AND relation_requests.target_id = ?
+    `).get(accountId)?.max_event_seq || 0
+  )
+
+  const unreadMessageEventSeq = Number(
+    db.prepare(`
+      SELECT COALESCE(MAX(inbox_events.event_seq), 0) AS max_event_seq
+      FROM thread_participants
+      JOIN messages
+        ON messages.thread_id = thread_participants.thread_id
+       AND messages.thread_seq > thread_participants.last_read_thread_seq
+       AND messages.sender_account_id != thread_participants.participant_id
+      JOIN inbox_events
+        ON inbox_events.owner_account_id = thread_participants.participant_id
+       AND inbox_events.message_id = messages.message_id
+       AND inbox_events.event_kind = 'message_received'
+      WHERE thread_participants.participant_kind = 'account'
+        AND thread_participants.participant_id = ?
+    `).get(accountId)?.max_event_seq || 0
+  )
+
+  return Math.max(pendingRelationRequestEventSeq, unreadMessageEventSeq)
+}
+
+function getRelationRequestResolutionAttentionState(accountId, options = {}) {
+  const db = options.db || getAgentDb()
+  const lastDeliveredEventSeq = Number(options.lastDeliveredEventSeq || 0)
+  const row = db.prepare(`
+    SELECT
+      COALESCE(MAX(
+        CASE
+          WHEN relation_requests.status = 'accepted' THEN inbox_events.event_seq
+          ELSE 0
+        END
+      ), 0) AS accepted_event_seq,
+      COALESCE(MAX(
+        CASE
+          WHEN relation_requests.status = 'rejected' THEN inbox_events.event_seq
+          ELSE 0
+        END
+      ), 0) AS declined_event_seq
+    FROM inbox_events
+    JOIN relation_requests
+      ON relation_requests.request_id = inbox_events.relation_request_id
+    WHERE inbox_events.owner_account_id = ?
+      AND inbox_events.event_kind = 'relation_request_resolved'
+      AND inbox_events.event_seq > ?
+  `).get(accountId, lastDeliveredEventSeq)
+
+  return {
+    acceptedEventSeq: Number(row?.accepted_event_seq || 0),
+    declinedEventSeq: Number(row?.declined_event_seq || 0),
+  }
+}
+
+function getPendingAttentionForAccount(accountId, options = {}) {
+  const db = options.db || getAgentDb()
+  const inboxSentinelText = normalizeOptionalString(options.inboxSentinelText) || DEFAULT_SENTINEL_TEXT
+  const lastDeliveredEventSeq = Number(options.lastDeliveredEventSeq || 0)
+  const inboxEventSeq = getLatestInboxAttentionEventSeq(accountId, { db })
+  const {
+    acceptedEventSeq,
+    declinedEventSeq,
+  } = getRelationRequestResolutionAttentionState(accountId, {
+    db,
+    lastDeliveredEventSeq,
+  })
+  const latestEventSeq = Math.max(inboxEventSeq, acceptedEventSeq, declinedEventSeq)
+
+  if (latestEventSeq <= lastDeliveredEventSeq) {
+    return null
+  }
+
+  if (inboxEventSeq > lastDeliveredEventSeq) {
+    return {
+      eventSeq: latestEventSeq,
+      kind: "inbox",
+      text: inboxSentinelText,
+    }
+  }
+
+  if (acceptedEventSeq > lastDeliveredEventSeq && declinedEventSeq > lastDeliveredEventSeq) {
+    return {
+      eventSeq: latestEventSeq,
+      kind: "relation_request_updates",
+      text: RELATION_REQUEST_UPDATES_TEXT,
+    }
+  }
+
+  if (acceptedEventSeq > lastDeliveredEventSeq) {
+    return {
+      eventSeq: latestEventSeq,
+      kind: "relation_requests_accepted",
+      text: RELATION_REQUESTS_ACCEPTED_TEXT,
+    }
+  }
+
+  return {
+    eventSeq: latestEventSeq,
+    kind: "relation_requests_declined",
+    text: RELATION_REQUESTS_DECLINED_TEXT,
+  }
 }
 
 async function whoami(options = {}) {
@@ -951,81 +1157,8 @@ async function readInbox(options = {}) {
     `).get(binding.accountId)?.latest_event_seq || 0
   )
 
-  const unreadThreads = db.prepare(`
-    SELECT
-      tp.thread_id,
-      tp.last_read_thread_seq,
-      other.participant_id AS counterpart_account_id,
-      accounts.display_name AS counterpart_display_name,
-      (
-        SELECT COALESCE(MAX(m.thread_seq), 0)
-        FROM messages m
-        WHERE m.thread_id = tp.thread_id
-      ) AS latest_thread_seq,
-      (
-        SELECT m.body
-        FROM messages m
-        WHERE m.thread_id = tp.thread_id
-        ORDER BY m.thread_seq DESC
-        LIMIT 1
-      ) AS latest_message_body,
-      (
-        SELECT m.created_at
-        FROM messages m
-        WHERE m.thread_id = tp.thread_id
-        ORDER BY m.thread_seq DESC
-        LIMIT 1
-      ) AS latest_message_created_at,
-      (
-        SELECT m.sender_account_id
-        FROM messages m
-        WHERE m.thread_id = tp.thread_id
-        ORDER BY m.thread_seq DESC
-        LIMIT 1
-      ) AS latest_message_sender_account_id
-    FROM thread_participants tp
-    JOIN thread_participants other
-      ON other.thread_id = tp.thread_id
-     AND other.participant_kind = 'account'
-     AND other.participant_id != tp.participant_id
-    LEFT JOIN accounts
-      ON accounts.account_id = other.participant_id
-    WHERE tp.participant_kind = 'account'
-      AND tp.participant_id = ?
-    ORDER BY latest_message_created_at DESC
-  `).all(binding.accountId)
-    .filter((row) => Number(row.latest_thread_seq || 0) > Number(row.last_read_thread_seq || 0))
-    .map((row) => ({
-      counterpartAccountId: row.counterpart_account_id,
-      counterpartDisplayName: row.counterpart_display_name,
-      lastReadThreadSeq: Number(row.last_read_thread_seq || 0),
-      latestMessage: row.latest_message_body
-        ? {
-            body: row.latest_message_body,
-            createdAt: row.latest_message_created_at,
-            senderAccountId: row.latest_message_sender_account_id,
-            threadSeq: Number(row.latest_thread_seq || 0),
-          }
-        : null,
-      threadId: row.thread_id,
-      unreadCount: Number(row.latest_thread_seq || 0) - Number(row.last_read_thread_seq || 0),
-    }))
-
-  const pendingRelationRequests = db.prepare(`
-    SELECT
-      relation_requests.*,
-      accounts.display_name AS requester_display_name
-    FROM relation_requests
-    LEFT JOIN accounts
-      ON accounts.account_id = relation_requests.requester_account_id
-    WHERE relation_requests.status = 'pending'
-      AND relation_requests.target_kind = 'account'
-      AND relation_requests.target_id = ?
-    ORDER BY relation_requests.created_at ASC
-  `).all(binding.accountId).map((row) => ({
-    ...rowToRelationRequest(row),
-    requesterDisplayName: row.requester_display_name,
-  }))
+  const unreadThreads = listUnreadThreadsForAccount(db, binding.accountId)
+  const pendingRelationRequests = listPendingRelationRequestsForAccount(db, binding.accountId)
 
   return {
     account: getAccountById(binding.accountId),
@@ -1207,12 +1340,24 @@ function listActiveAutoWakeBindings() {
       ORDER BY runtime_bindings.bound_at ASC
     `)
     .all()
-    .map((row) => ({
-      ...rowToBinding(row),
-      lastDeliveredEventSeq: Number(row.last_delivered_event_seq || 0),
-      lastDeliverySucceededAt: row.last_delivery_succeeded_at,
-      latestEventSeq: Number(row.latest_event_seq || 0),
-    }))
+    .map((row) => {
+      const binding = rowToBinding(row)
+      const lastDeliveredEventSeq = Number(row.last_delivered_event_seq || 0)
+      const attention = getPendingAttentionForAccount(row.account_id, {
+        inboxSentinelText: binding.sentinelText,
+        lastDeliveredEventSeq,
+      })
+
+      return {
+        ...binding,
+        attentionKind: attention?.kind || null,
+        attentionText: attention?.text || null,
+        lastDeliveredEventSeq,
+        lastDeliverySucceededAt: row.last_delivery_succeeded_at,
+        latestAttentionEventSeq: Number(attention?.eventSeq || 0),
+        latestEventSeq: Number(row.latest_event_seq || 0),
+      }
+    })
 }
 
 function markDeliverySucceeded(accountId, deliveredEventSeq) {
@@ -1259,11 +1404,16 @@ async function cleanupMissingBindings() {
 
 module.exports = {
   DEFAULT_SENTINEL_TEXT,
+  RELATION_REQUESTS_ACCEPTED_TEXT,
+  RELATION_REQUESTS_DECLINED_TEXT,
+  RELATION_REQUEST_UPDATES_TEXT,
   cleanupMissingBindings,
   createFreshAccountId,
   getAccountById,
   getActiveRelationRow,
   getCurrentBinding,
+  getLatestInboxAttentionEventSeq,
+  getPendingAttentionForAccount,
   listActiveAutoWakeBindings,
   listRelations,
   login,

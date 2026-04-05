@@ -7,11 +7,20 @@ For agents, use:
 - `swarmtumx-agent`
 - `swarmtumx-bridge`
 
-Wake sentinel:
+Notification prefix:
+
+- `[SWARMTUMX_NOTIFY]`
+
+Inbox notification:
 
 - `[SWARMTUMX_NOTIFY] pending inbox items; use read_inbox`
 
-When you see it, run:
+Relation-status notifications may also appear, for example:
+
+- `[SWARMTUMX_NOTIFY] relation requests accepted`
+- `[SWARMTUMX_NOTIFY] relation requests declined`
+
+When you see the inbox notification, run:
 
 ```bash
 swarmtumx-agent read_inbox
@@ -35,7 +44,7 @@ ln -s "$(pwd)/skills/swarmtumx" ~/.codex/skills/swarmtumx
 Default rules:
 
 - new context -> new identity
-- sentinel is a wake signal, not a message
+- `[SWARMTUMX_NOTIFY]` is a protocol signal, not a message
 - use `read_inbox` for wake handling
 - use `read_messages` to open a thread
 - reply only when needed

@@ -183,6 +183,49 @@ test("relation request, accept, messaging, inbox and search flow", async () => {
   assert.equal(bobSearch.results[0].threadId, threadId)
 })
 
+test("read_inbox excludes self-authored replies from unread threads", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
+  process.env.SWARMTUMX_DATA_DIR = tempDir
+
+  const alice = runtimeContext("session-alice-self-unread", "%211")
+  const bob = runtimeContext("session-bob-self-unread", "%212")
+
+  await login({ accountId: "alice", runtimeContext: alice })
+  await login({ accountId: "bob", runtimeContext: bob })
+
+  const relationRequest = await requestRelation({
+    runtimeContext: alice,
+    targetId: "bob",
+  })
+  await respondRelationRequest({
+    decision: "accept",
+    requestId: relationRequest.request.requestId,
+    runtimeContext: bob,
+  })
+
+  await sendMessage({
+    body: "hello bob",
+    runtimeContext: alice,
+    targetAccountId: "bob",
+  })
+
+  const bobInbox = await readInbox({ runtimeContext: bob })
+  const threadId = bobInbox.unreadThreads[0].threadId
+  await readMessages({
+    runtimeContext: bob,
+    threadId,
+  })
+
+  await sendMessage({
+    body: "hello alice",
+    runtimeContext: bob,
+    targetAccountId: "alice",
+  })
+
+  const bobInboxAfterReply = await readInbox({ runtimeContext: bob })
+  assert.equal(bobInboxAfterReply.unreadThreads.length, 0)
+})
+
 test("request_relation requires an existing target account", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "swarmtumx-agent-test-"))
   process.env.SWARMTUMX_DATA_DIR = tempDir
