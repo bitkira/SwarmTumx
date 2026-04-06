@@ -417,12 +417,14 @@ async function flushPendingInput(sessionId, binding) {
     return
   }
 
-  const data = binding.pendingInput.join("")
+  const pending = [...binding.pendingInput]
   binding.pendingInput.length = 0
   try {
-    await api.terminal.write(sessionId, data)
+    for (const entry of pending) {
+      await api.terminal.write(sessionId, entry.data, entry.binary ? { binary: true } : undefined)
+    }
   } catch (error) {
-    binding.pendingInput.unshift(data)
+    binding.pendingInput.unshift(...pending)
     throw error
   }
 }
@@ -527,7 +529,7 @@ async function attachTerminal(tile, dom) {
     }
 
     if (!binding.attached) {
-      binding.pendingInput.push(data)
+      binding.pendingInput.push({ data, binary: false })
       return
     }
 
@@ -542,11 +544,11 @@ async function attachTerminal(tile, dom) {
     }
 
     if (!binding.attached) {
-      binding.pendingInput.push(data)
+      binding.pendingInput.push({ data, binary: true })
       return
     }
 
-    void api.terminal.write(tile.sessionId, data).catch((error) => {
+    void api.terminal.write(tile.sessionId, data, { binary: true }).catch((error) => {
       writeTerminalNotice(tile.sessionId, "binary write error", error)
     })
   })

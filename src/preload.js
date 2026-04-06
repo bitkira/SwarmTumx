@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld("swarmTumx", {
     detachSession: (sessionId) => ipcRenderer.invoke("terminal:detach-session", sessionId),
     resizeSession: (sessionId, cols, rows) =>
       ipcRenderer.invoke("terminal:resize-session", sessionId, cols, rows),
-    write: (sessionId, data) => ipcRenderer.invoke("terminal:write", sessionId, data),
+    write: (sessionId, data, options) => ipcRenderer.invoke("terminal:write", sessionId, data, options),
     onData: (handler) => subscribe("terminal:data", handler),
     onExit: (handler) => subscribe("terminal:exit", handler),
   },

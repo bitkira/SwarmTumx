@@ -18,6 +18,7 @@ const {
   typeToPane,
   typeText,
 } = require("../runtime/tmux-adapter");
+const { ControlModeTerminalManager } = require("../runtime/control-mode-terminal-manager");
 const { TmuxTerminalManager } = require("../runtime/tmux-terminal-manager");
 const {
   loadCanvasState,
@@ -30,6 +31,17 @@ const {
 let mainWindow = null;
 let terminalManager = null;
 let updateManager = null;
+
+function createTerminalManager() {
+  const transport = String(process.env.SWARMTUMX_TERMINAL_TRANSPORT || "control").trim().toLowerCase();
+  if (transport === "attach" || transport === "pty") {
+    return new TmuxTerminalManager();
+  }
+  if (transport === "control" || transport === "control-mode") {
+    return new ControlModeTerminalManager();
+  }
+  throw new Error(`unsupported terminal transport: ${transport}`);
+}
 
 function configureAppIcon() {
   if (process.platform !== "darwin" || app.isPackaged || !app.dock?.setIcon) {
@@ -73,7 +85,7 @@ function createMainWindow() {
 }
 
 function registerIpc() {
-  terminalManager = new TmuxTerminalManager();
+  terminalManager = createTerminalManager();
   updateManager = new UpdateManager();
 
   ipcMain.handle("app:get-workspace-root", () => getWorkspaceRoot());
@@ -115,8 +127,8 @@ function registerIpc() {
   ipcMain.handle("terminal:resize-session", (_event, sessionId, cols, rows) =>
     terminalManager.resizeSession(sessionId, cols, rows)
   );
-  ipcMain.handle("terminal:write", (_event, sessionId, data) =>
-    terminalManager.writeToSession(sessionId, data)
+  ipcMain.handle("terminal:write", (_event, sessionId, data, options) =>
+    terminalManager.writeToSession(sessionId, data, options)
   );
 }
 
